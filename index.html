@@ -73,18 +73,84 @@ const EMPLOYEES=[{"code": "CSWDO-01", "name": "IRENE BARBERO-RACHO", "position":
 
 function show(id){['home','scan','admin'].forEach(x=>document.getElementById(x).classList.toggle('hide',x!==id));}
 async function login(){
- const {data,error}=await sb.auth.signInWithPassword({email:email.value,password:password.value});
- if(error){msg.textContent=error.message;return}
- session=data.session; await boot();
+ const emailInput = document.getElementById('email');
+ const passwordInput = document.getElementById('password');
+ const msgBox = document.getElementById('msg');
+ const loginButton = document.querySelector('#login button');
+
+ const userEmail = emailInput.value.trim();
+ const userPassword = passwordInput.value;
+
+ msgBox.textContent = '';
+ if(!userEmail || !userPassword){
+   msgBox.textContent = 'Please enter your email and password.';
+   return;
+ }
+
+ loginButton.disabled = true;
+ loginButton.textContent = 'Logging in...';
+
+ try {
+   const {data,error} = await sb.auth.signInWithPassword({
+     email: userEmail,
+     password: userPassword
+   });
+
+   if(error) throw error;
+
+   if(!data.session){
+     throw new Error('Login succeeded but no session was returned.');
+   }
+
+   session = data.session;
+   await boot();
+
+ } catch(error) {
+   console.error('LOGIN ERROR:', error);
+   msgBox.textContent = error?.message || String(error);
+ } finally {
+   loginButton.disabled = false;
+   loginButton.textContent = 'Login';
+ }
 }
 async function boot(){
- const {data}=await sb.from('profiles').select('*,employees(*)').eq('id',session.user.id).single();
+ const loginBox = document.getElementById('login');
+ const appBox = document.getElementById('app');
+ const welcomeBox = document.getElementById('welcome');
+ const roleBox = document.getElementById('role');
+ const adminButton = document.getElementById('adminBtn');
+ const msgBox = document.getElementById('msg');
+
+ const {data,error}=await sb
+   .from('profiles')
+   .select('*,employees(*)')
+   .eq('id',session.user.id)
+   .single();
+
+ if(error){
+   console.error('PROFILE ERROR:', error);
+   msgBox.textContent = 'Login succeeded, but your employee profile could not be loaded: ' + error.message;
+   await sb.auth.signOut();
+   return;
+ }
+
+ if(!data){
+   msgBox.textContent = 'Login succeeded, but no employee profile was found for this account.';
+   await sb.auth.signOut();
+   return;
+ }
+
  profile=data;
- login.classList.add('hide');app.classList.remove('hide');
- welcome.textContent='Welcome, '+(data.employees?.full_name||session.user.email);
- role.textContent='Account: '+data.role;
- adminBtn.classList.toggle('hide',data.role!=='admin');
- if(data.role==='admin'){await fillEmployees();}
+ loginBox.classList.add('hide');
+ appBox.classList.remove('hide');
+
+ welcomeBox.textContent='Welcome, '+(data.employees?.full_name||session.user.email);
+ roleBox.textContent='Account: '+data.role;
+ adminButton.classList.toggle('hide',data.role!=='admin');
+
+ if(data.role==='admin'){
+   await fillEmployees();
+ }
 }
 async function logout(){await sb.auth.signOut();location.reload()}
 async function startScanner(){
