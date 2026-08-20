@@ -372,15 +372,6 @@ function weeklyQRHtml(records){
  const records=${JSON.stringify(records)};
  records.forEach(r=>new QRCode(document.getElementById('qr-'+r.qr_date),{text:r.token,width:360,height:360}));
  <\/script>
-<script>
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch(err => {
-      console.warn('Service worker registration failed:', err);
-    });
-  });
-}
-</script>
 </body></html>`;
 }
 async function generateWeeklyQR(){
