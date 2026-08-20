@@ -17,6 +17,8 @@ table{width:100%;border-collapse:collapse}th,td{padding:9px;border-bottom:1px so
 
 .tardy-message{color:#b00020 !important;font-weight:700}
 .tardy-time{color:#b00020 !important;font-weight:700}
+
+.status-chip{font-weight:700}
 </style></head>
 <body>
 <header><b>CSWDO Employee QR Logbook</b><div>Online Attendance & DTR System</div></header>
@@ -82,6 +84,40 @@ table{width:100%;border-collapse:collapse}th,td{padding:9px;border-bottom:1px so
   <div id="dailyAttendanceSummary" class="grid" style="margin-top:12px"></div>
   <div id="dailyAttendanceMsg" class="muted"></div>
   <div id="dailyAttendanceTable" style="overflow:auto"></div>
+</div>
+
+
+<h3>Employee Daily Status</h3>
+<div class="card">
+  <div class="row">
+    <label>Date
+      <input type="date" id="statusDate">
+    </label>
+    <label>Employee
+      <select id="statusEmployee"></select>
+    </label>
+    <label>Status
+      <select id="employeeStatus">
+        <option value="PRESENT">Present</option>
+        <option value="ON_LEAVE">On Leave</option>
+        <option value="OFFICIAL_TRAVEL">Official Travel</option>
+        <option value="OFFICIAL_BUSINESS">Official Business</option>
+        <option value="TRAINING">Training / Seminar</option>
+        <option value="FIELD_WORK">Field Work</option>
+        <option value="SICK_LEAVE">Sick Leave</option>
+        <option value="VACATION_LEAVE">Vacation Leave</option>
+        <option value="SPECIAL_LEAVE">Special Leave</option>
+        <option value="ABSENT">Absent</option>
+        <option value="OTHER">Other</option>
+      </select>
+    </label>
+    <label>Remarks
+      <input type="text" id="statusRemarks" placeholder="Optional remarks">
+    </label>
+    <button onclick="saveEmployeeStatus()">Save Status</button>
+  </div>
+  <div id="statusMsg" class="muted"></div>
+  <p class="small">Employees marked On Leave, Official Travel, Official Business, Training, Field Work, or another approved status will be shown with that status in the Daily Attendance Monitor. Their absence from QR scans will not automatically be treated as an ordinary attendance absence.</p>
 </div>
 
 <h3>Monthly DTR</h3>
@@ -456,92 +492,85 @@ async function loadDailyAttendance(){
   summaryBox.innerHTML = '';
 
   try{
-    const [{data:employees,error:employeeError},{data:attendance,error:attendanceError}] = await Promise.all([
-      sb.from('employees')
-        .select('id,employee_code,full_name,position,office')
-        .eq('is_active',true)
-        .order('employee_code'),
-      sb.from('attendance')
-        .select('employee_id,attendance_date,am_arrival,am_departure,pm_arrival,pm_departure')
-        .eq('attendance_date',selectedDate)
+    const [{data:employees,error:employeeError},{data:attendance,error:attendanceError},{data:statuses,error:statusError}] = await Promise.all([
+      sb.from('employees').select('id,employee_code,full_name,position,office').eq('is_active',true).order('employee_code'),
+      sb.from('attendance').select('employee_id,attendance_date,am_arrival,am_departure,pm_arrival,pm_departure').eq('attendance_date',selectedDate),
+      sb.from('employee_daily_status').select('employee_id,status,remarks').eq('status_date',selectedDate)
     ]);
 
     if(employeeError) throw employeeError;
     if(attendanceError) throw attendanceError;
+    if(statusError) throw statusError;
 
     const attendanceMap = Object.fromEntries((attendance||[]).map(a=>[a.employee_id,a]));
+    const statusMap = Object.fromEntries((statuses||[]).map(s=>[s.employee_id,s]));
     const allEmployees = employees || [];
 
-    let timedIn = 0;
-    let timedOut = 0;
-    let notTimedIn = 0;
+    let timedIn = 0, timedOut = 0, notTimedIn = 0, approvedStatuses = 0;
 
     const rows = allEmployees.map((e,i)=>{
       const a = attendanceMap[e.id] || {};
+      const ds = statusMap[e.id] || {};
       const am = formatDtrTime(a.am_arrival);
       const amd = formatDtrTime(a.am_departure);
       const pm = formatDtrTime(a.pm_arrival);
       const pmd = formatDtrTime(a.pm_departure);
-
-      // "Time In" is the first arrival recorded for the day.
       const timeIn = am || pm || '';
       const amTardy = a.am_arrival && String(a.am_arrival).slice(0,8) > '08:00:00';
-      let status = 'Not Timed In';
 
-      if(pmd){
-        status = amTardy ? 'Timed Out — Tardy' : 'Timed Out';
-        timedOut++;
-        timedIn++;
+      let status = ds.status || 'NOT_TIMED_IN';
+      if(ds.status){
+        approvedStatuses++;
+      }else if(pmd){
+        status = amTardy ? 'TIMED_OUT_TARDY' : 'TIMED_OUT';
+        timedOut++; timedIn++;
       }else if(timeIn){
-        status = amTardy ? 'Timed In — Tardy' : 'Timed In';
+        status = amTardy ? 'TIMED_IN_TARDY' : 'TIMED_IN';
         timedIn++;
       }else{
         notTimedIn++;
       }
 
-      return {
-        e, a, am, amd, pm, pmd, timeIn, status, no:i+1
-      };
+      return {e,a,ds,am,amd,pm,pmd,timeIn,status,no:i+1};
     });
 
     summaryBox.innerHTML = `
       <div class="card"><b>${timedIn}</b><br>Timed In</div>
       <div class="card"><b>${timedOut}</b><br>Timed Out</div>
       <div class="card"><b>${notTimedIn}</b><br>Not Yet Timed In</div>
+      <div class="card"><b>${approvedStatuses}</b><br>With Daily Status</div>
       <div class="card"><b>${allEmployees.length}</b><br>Total Employees</div>
     `;
 
-    let tableHtml = `
-      <table id="dailyAttendancePrintTable">
-        <thead>
-          <tr>
-            <th>No.</th>
-            <th>Employee Code</th>
-            <th>Employee</th>
-            <th>Position</th>
-            <th>Office</th>
-            <th>Time In</th>
-            <th>A.M. Arrival</th>
-            <th>A.M. Departure</th>
-            <th>P.M. Arrival</th>
-            <th>P.M. Departure</th>
-            <th>Status</th>
-          </tr>
-        </thead><tbody>`;
+    const label = {
+      PRESENT:'Present', ON_LEAVE:'On Leave', OFFICIAL_TRAVEL:'Official Travel',
+      OFFICIAL_BUSINESS:'Official Business', TRAINING:'Training / Seminar',
+      FIELD_WORK:'Field Work', SICK_LEAVE:'Sick Leave', VACATION_LEAVE:'Vacation Leave',
+      SPECIAL_LEAVE:'Special Leave', ABSENT:'Absent', OTHER:'Other',
+      NOT_TIMED_IN:'Not Timed In', TIMED_IN:'Timed In', TIMED_IN_TARDY:'Timed In — Tardy',
+      TIMED_OUT:'Timed Out', TIMED_OUT_TARDY:'Timed Out — Tardy'
+    };
+
+    let tableHtml = `<table id="dailyAttendancePrintTable"><thead><tr>
+      <th>No.</th><th>Employee Code</th><th>Employee</th><th>Position</th><th>Office</th>
+      <th>Daily Status</th><th>Remarks</th><th>Time In</th>
+      <th>A.M. Arrival</th><th>A.M. Departure</th><th>P.M. Arrival</th><th>P.M. Departure</th><th>Status</th>
+    </tr></thead><tbody>`;
 
     rows.forEach(r=>{
+      const statusClass = String(r.status).includes('TARDY') ? 'tardy-time' : '';
       tableHtml += `<tr>
         <td>${r.no}</td>
-        <td>${escapeHtml(r.e.employee_code || '')}</td>
-        <td>${escapeHtml(r.e.full_name || '')}</td>
-        <td>${escapeHtml(r.e.position || '')}</td>
-        <td>${escapeHtml(r.e.office || '')}</td>
-        <td><b>${r.timeIn}</b></td>
-        <td>${r.am}</td>
-        <td>${r.amd}</td>
-        <td>${r.pm}</td>
-        <td>${r.pmd}</td>
-        <td>${escapeHtml(r.status)}</td>
+        <td>${escapeHtml(r.e.employee_code||'')}</td>
+        <td>${escapeHtml(r.e.full_name||'')}</td>
+        <td>${escapeHtml(r.e.position||'')}</td>
+        <td>${escapeHtml(r.e.office||'')}</td>
+        <td>${escapeHtml(label[r.ds.status] || '')}</td>
+        <td>${escapeHtml(r.ds.remarks || '')}</td>
+        <td class="${statusClass}">${r.timeIn}</td>
+        <td class="${r.a.am_arrival && String(r.a.am_arrival).slice(0,8) > '08:00:00' ? 'tardy-time' : ''}">${r.am}</td>
+        <td>${r.amd}</td><td>${r.pm}</td><td>${r.pmd}</td>
+        <td>${escapeHtml(label[r.status] || r.status)}</td>
       </tr>`;
     });
 
@@ -551,8 +580,6 @@ async function loadDailyAttendance(){
   }catch(err){
     console.error(err);
     msgBox.textContent = 'Unable to load daily attendance: ' + (err?.message || String(err));
-    tableBox.innerHTML = '';
-    summaryBox.innerHTML = '';
   }
 }
 
@@ -610,6 +637,50 @@ document.addEventListener('DOMContentLoaded', ()=>{
     const local = new Date(now.getTime() - now.getTimezoneOffset()*60000);
     d.value = local.toISOString().slice(0,10);
   }
+});
+
+
+async function loadStatusEmployees(){
+  const sel = document.getElementById('statusEmployee');
+  if(!sel) return;
+  const {data,error} = await sb.from('employees').select('id,employee_code,full_name').eq('is_active',true).order('employee_code');
+  if(error){ document.getElementById('statusMsg').textContent=error.message; return; }
+  sel.innerHTML = (data||[]).map(e=>`<option value="${e.id}">${escapeHtml(e.full_name)} (${escapeHtml(e.employee_code)})</option>`).join('');
+}
+
+async function saveEmployeeStatus(){
+  const statusDate = document.getElementById('statusDate').value;
+  const employeeId = document.getElementById('statusEmployee').value;
+  const status = document.getElementById('employeeStatus').value;
+  const remarks = document.getElementById('statusRemarks').value.trim();
+  const msg = document.getElementById('statusMsg');
+
+  if(!statusDate || !employeeId || !status){
+    msg.textContent='Please complete the date, employee, and status.';
+    return;
+  }
+
+  const {error} = await sb.from('employee_daily_status').upsert({
+    employee_id: employeeId,
+    status_date: statusDate,
+    status,
+    remarks: remarks || null,
+    recorded_by: profile.id
+  }, {onConflict:'employee_id,status_date'});
+
+  msg.textContent = error ? ('Unable to save status: '+error.message) : 'Daily employee status saved.';
+  if(!error) loadDailyAttendance();
+}
+
+document.addEventListener('DOMContentLoaded', async ()=>{
+  const d=document.getElementById('statusDate');
+  const daily=document.getElementById('dailyAttendanceDate');
+  const now=new Date();
+  const local=new Date(now.getTime()-now.getTimezoneOffset()*60000);
+  const today=local.toISOString().slice(0,10);
+  if(d && !d.value) d.value=today;
+  if(daily && !daily.value) daily.value=today;
+  await loadStatusEmployees();
 });
 
 </script></body></html>
