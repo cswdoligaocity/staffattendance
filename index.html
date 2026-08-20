@@ -45,11 +45,11 @@ table{width:100%;border-collapse:collapse}th,td{padding:9px;border-bottom:1px so
 <div class="card no-print">
 <h3>Create Employee Account</h3>
 <p>Select a preloaded employee, enter their email and a temporary password. The system will create the Supabase login and automatically link it to that employee.</p>
-<label>Employee <select id="accountEmployee"></select></label>
+<label>Employee <select id="accountEmployee" onchange="clearAccountMessage()"></select></label>
 <label>Email <input id="accountEmail" type="email" placeholder="employee@email.com"></label>
 <label>Temporary Password <input id="accountPassword" type="password" placeholder="At least 8 characters"></label>
 <button onclick="createEmployeeAccount()">Create Account</button>
-<p id="accountMsg"></p>
+<p id="accountMsg" aria-live="polite"></p>
 </div>
 <div class="card no-print">
 <h3>Monthly DTR</h3>
@@ -171,22 +171,77 @@ async function fillEmployees(){
  const ae=document.getElementById('accountEmployee');
  if(ae) ae.innerHTML=data.map(e=>`<option value="${e.id}">${e.full_name} (${e.employee_code})</option>`).join('');
 }
+function clearAccountMessage(){
+ const msg = document.getElementById('accountMsg');
+ if(msg) msg.textContent = '';
+}
+
 async function createEmployeeAccount(){
- if(profile.role!=='admin') return;
- const employee_id=document.getElementById('accountEmployee').value;
- const email=document.getElementById('accountEmail').value.trim();
- const password=document.getElementById('accountPassword').value;
- const accountMsg=document.getElementById('accountMsg');
- if(!employee_id||!email||!password){accountMsg.textContent='Employee, email and password are required.';return;}
+ if(profile?.role!=='admin') return;
+
+ const employee_id = document.getElementById('accountEmployee').value;
+ const email = document.getElementById('accountEmail').value.trim();
+ const password = document.getElementById('accountPassword').value;
+ const accountMsg = document.getElementById('accountMsg');
+ const button = document.querySelector('#admin button[onclick="createEmployeeAccount()"]');
+
+ if(!employee_id || !email || !password){
+   accountMsg.textContent='Employee, email and temporary password are required.';
+   return;
+ }
+
+ if(password.length < 8){
+   accountMsg.textContent='Temporary password must be at least 8 characters.';
+   return;
+ }
+
+ // Prevent accidental duplicate employee accounts.
+ const {data: existingProfile, error: profileCheckError} = await sb
+   .from('profiles')
+   .select('id, role')
+   .eq('employee_id', employee_id)
+   .maybeSingle();
+
+ if(profileCheckError){
+   accountMsg.textContent='Unable to check the employee account: ' + profileCheckError.message;
+   return;
+ }
+
+ if(existingProfile){
+   accountMsg.textContent='This employee already has an account. No new account was created.';
+   return;
+ }
+
  accountMsg.textContent='Creating account...';
- const {data,error}=await sb.functions.invoke('create-employee-account',{
-   body:{employee_id,email,password}
- });
- if(error){accountMsg.textContent=error.message;return;}
- accountMsg.textContent=data?.message||'Account created.';
- document.getElementById('accountEmail').value='';
- document.getElementById('accountPassword').value='';
- await fillEmployees();
+ if(button){
+   button.disabled = true;
+   button.textContent = 'Creating...';
+ }
+
+ try{
+   const {data,error}=await sb.functions.invoke('create-employee-account',{
+     body:{employee_id,email,password}
+   });
+
+   if(error) throw error;
+
+   if(!data?.success){
+     throw new Error(data?.error || 'Account creation failed.');
+   }
+
+   accountMsg.textContent = '✓ ' + (data.message || 'Employee account created successfully.');
+
+   document.getElementById('accountEmail').value='';
+   document.getElementById('accountPassword').value='';
+
+ }catch(error){
+   accountMsg.textContent = 'Account creation failed: ' + (error?.message || String(error));
+ }finally{
+   if(button){
+     button.disabled = false;
+     button.textContent = 'Create Account';
+   }
+ }
 }
 function monthDays(m){let [y,mo]=m.split('-').map(Number),last=new Date(y,mo,0).getDate();return Array.from({length:last},(_,i)=>String(i+1).padStart(2,'0'))}
 async function loadDTR(){
