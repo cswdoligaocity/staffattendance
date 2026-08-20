@@ -54,15 +54,31 @@ table{width:100%;border-collapse:collapse}th,td{padding:9px;border-bottom:1px so
 
 <div class="card no-print">
 <h3>Weekly Daily QR Codes</h3>
-<p>Each office day has its own unique QR code. Generate the week's QR codes here, then download/print the weekly sheet and display the correct day's QR at the office entrance.</p>
+<p>Each office day has its own unique QR code. Generate all Monday–Friday codes at once, download the weekly QR sheet, and display only the QR for the current day.</p>
 <label>Week Starting (Monday) <input id="qrWeekStart" type="date"></label>
-<button onclick="generateWeeklyQR()">Generate / Download Weekly QR</button>
+<button onclick="generateWeeklyQR()">Generate & Download Weekly QR Sheet</button>
 <button onclick="printWeeklyQR()">Print Weekly QR / Save as PDF</button>
 <p id="qrMsg" aria-live="polite"></p>
 <div id="weeklyQrPreview" class="grid"></div>
 </div>
 
 <div class="card no-print">
+
+<h3>Daily Attendance Monitor</h3>
+<div class="card">
+  <div class="row">
+    <label>Date
+      <input type="date" id="dailyAttendanceDate">
+    </label>
+    <button onclick="loadDailyAttendance()">View Daily Attendance</button>
+    <button onclick="printDailyAttendance()">Print Daily Attendance</button>
+  </div>
+
+  <div id="dailyAttendanceSummary" class="grid" style="margin-top:12px"></div>
+  <div id="dailyAttendanceMsg" class="muted"></div>
+  <div id="dailyAttendanceTable" style="overflow:auto"></div>
+</div>
+
 <h3>Monthly DTR</h3>
 <div class="no-print">
 <label>Month <input id="month" type="month"></label>
@@ -235,7 +251,7 @@ function weeklyQRHtml(records){
    <h2>${escapeHtml(prettyDate(r.qr_date))}</h2>
    <p class="instruction">SCAN THIS QR USING YOUR EMPLOYEE ACCOUNT</p>
    <div class="qr" id="qr-${r.qr_date}"></div>
-   <h3>OFFICIAL DAILY OFFICE QR</h3>
+   <h3>OFFICIAL DAILY OFFICE QR</h3><p><b>DO NOT USE ON OTHER DATES</b></p>
    <p>Valid only on <b>${escapeHtml(prettyDate(r.qr_date))}</b></p>
    <p class="small">5:00 AM start • 12:00 NN transition • 5:00 PM departure</p>
  </div>`).join('');
@@ -269,7 +285,7 @@ async function generateWeeklyQR(){
    a.download='CSWDO_Weekly_Daily_QR_'+start+'.html';
    a.click();
    URL.revokeObjectURL(url);
-   msg.textContent='✓ Weekly QR created. The downloaded HTML contains 5 daily QR codes (Monday–Friday).';
+   msg.textContent='✓ Weekly QR created. Your download contains 5 unique daily QR codes (Monday–Friday).';
  }catch(e){
    msg.textContent='Unable to generate weekly QR: '+(e?.message||String(e));
  }
@@ -408,4 +424,181 @@ setInterval(()=>clock.textContent=new Date().toLocaleString('en-PH',{dateStyle:'
    monthInput.value=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
  }
 })();
+
+async function loadDailyAttendance(){
+  if(profile?.role!=='admin') return;
+
+  const dateInput = document.getElementById('dailyAttendanceDate');
+  const tableBox = document.getElementById('dailyAttendanceTable');
+  const msgBox = document.getElementById('dailyAttendanceMsg');
+  const summaryBox = document.getElementById('dailyAttendanceSummary');
+  const selectedDate = dateInput.value;
+
+  if(!selectedDate){
+    msgBox.textContent = 'Please select a date.';
+    tableBox.innerHTML = '';
+    summaryBox.innerHTML = '';
+    return;
+  }
+
+  msgBox.textContent = 'Loading daily attendance...';
+  tableBox.innerHTML = '';
+  summaryBox.innerHTML = '';
+
+  try{
+    const [{data:employees,error:employeeError},{data:attendance,error:attendanceError}] = await Promise.all([
+      sb.from('employees')
+        .select('id,employee_code,full_name,position,office')
+        .eq('is_active',true)
+        .order('employee_code'),
+      sb.from('attendance')
+        .select('employee_id,attendance_date,am_arrival,am_departure,pm_arrival,pm_departure')
+        .eq('attendance_date',selectedDate)
+    ]);
+
+    if(employeeError) throw employeeError;
+    if(attendanceError) throw attendanceError;
+
+    const attendanceMap = Object.fromEntries((attendance||[]).map(a=>[a.employee_id,a]));
+    const allEmployees = employees || [];
+
+    let timedIn = 0;
+    let timedOut = 0;
+    let notTimedIn = 0;
+
+    const rows = allEmployees.map((e,i)=>{
+      const a = attendanceMap[e.id] || {};
+      const am = formatDtrTime(a.am_arrival);
+      const amd = formatDtrTime(a.am_departure);
+      const pm = formatDtrTime(a.pm_arrival);
+      const pmd = formatDtrTime(a.pm_departure);
+
+      // "Time In" is the first arrival recorded for the day.
+      const timeIn = am || pm || '';
+      let status = 'Not Timed In';
+
+      if(pmd){
+        status = 'Timed Out';
+        timedOut++;
+        timedIn++;
+      }else if(timeIn){
+        status = 'Timed In';
+        timedIn++;
+      }else{
+        notTimedIn++;
+      }
+
+      return {
+        e, a, am, amd, pm, pmd, timeIn, status, no:i+1
+      };
+    });
+
+    summaryBox.innerHTML = `
+      <div class="card"><b>${timedIn}</b><br>Timed In</div>
+      <div class="card"><b>${timedOut}</b><br>Timed Out</div>
+      <div class="card"><b>${notTimedIn}</b><br>Not Yet Timed In</div>
+      <div class="card"><b>${allEmployees.length}</b><br>Total Employees</div>
+    `;
+
+    let tableHtml = `
+      <table id="dailyAttendancePrintTable">
+        <thead>
+          <tr>
+            <th>No.</th>
+            <th>Employee Code</th>
+            <th>Employee</th>
+            <th>Position</th>
+            <th>Office</th>
+            <th>Time In</th>
+            <th>A.M. Arrival</th>
+            <th>A.M. Departure</th>
+            <th>P.M. Arrival</th>
+            <th>P.M. Departure</th>
+            <th>Status</th>
+          </tr>
+        </thead><tbody>`;
+
+    rows.forEach(r=>{
+      tableHtml += `<tr>
+        <td>${r.no}</td>
+        <td>${escapeHtml(r.e.employee_code || '')}</td>
+        <td>${escapeHtml(r.e.full_name || '')}</td>
+        <td>${escapeHtml(r.e.position || '')}</td>
+        <td>${escapeHtml(r.e.office || '')}</td>
+        <td><b>${r.timeIn}</b></td>
+        <td>${r.am}</td>
+        <td>${r.amd}</td>
+        <td>${r.pm}</td>
+        <td>${r.pmd}</td>
+        <td>${escapeHtml(r.status)}</td>
+      </tr>`;
+    });
+
+    tableHtml += `</tbody></table>`;
+    tableBox.innerHTML = tableHtml;
+    msgBox.textContent = `${timedIn} employee(s) have timed in for ${selectedDate}.`;
+  }catch(err){
+    console.error(err);
+    msgBox.textContent = 'Unable to load daily attendance: ' + (err?.message || String(err));
+    tableBox.innerHTML = '';
+    summaryBox.innerHTML = '';
+  }
+}
+
+function formatDtrTime(value){
+  if(!value) return '';
+  const m = String(value).match(/^(\d{1,2}):(\d{2})/);
+  if(!m) return escapeHtml(String(value));
+  let h = Number(m[1]);
+  const min = m[2];
+  const suffix = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  return `${h}:${min} ${suffix}`;
+}
+
+function escapeHtml(value){
+  return String(value)
+    .replaceAll('&','&amp;')
+    .replaceAll('<','&lt;')
+    .replaceAll('>','&gt;')
+    .replaceAll('"','&quot;')
+    .replaceAll("'","&#039;");
+}
+
+function printDailyAttendance(){
+  const table = document.getElementById('dailyAttendancePrintTable');
+  const date = document.getElementById('dailyAttendanceDate')?.value || '';
+  if(!table){
+    alert('Load a daily attendance report first.');
+    return;
+  }
+  const w = window.open('', '_blank');
+  w.document.write(`<!doctype html><html><head><title>Daily Attendance - ${date}</title>
+  <style>
+    body{font-family:Arial,sans-serif;margin:24px;color:#111}
+    h1{text-align:center;font-size:18px;margin-bottom:4px}
+    h2{text-align:center;font-size:14px;font-weight:normal;margin-top:0}
+    table{width:100%;border-collapse:collapse;font-size:10px;margin-top:18px}
+    th,td{border:1px solid #555;padding:5px;text-align:center}
+    th{font-weight:bold}
+    td:nth-child(3){text-align:left}
+  </style></head><body>
+  <h1>CSWDO EMPLOYEE DAILY ATTENDANCE MONITOR</h1>
+  <h2>Date: ${escapeHtml(date)}</h2>
+  ${table.outerHTML}
+  <script>window.onload=()=>window.print();<\/script>
+  </body></html>`);
+  w.document.close();
+}
+
+
+document.addEventListener('DOMContentLoaded', ()=>{
+  const d = document.getElementById('dailyAttendanceDate');
+  if(d && !d.value){
+    const now = new Date();
+    const local = new Date(now.getTime() - now.getTimezoneOffset()*60000);
+    d.value = local.toISOString().slice(0,10);
+  }
+});
+
 </script></body></html>
