@@ -4,7 +4,7 @@
 <title>CSWDO Employee QR Logbook</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
-<script src="https://unpkg.com/html5-qrcode"></script>
+<script src="https://unpkg.com/html5-qrcode"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
 *{box-sizing:border-box}body{font-family:Inter,Arial,sans-serif;margin:0;background:#f4f7fb;color:#183047}
 header{background:#123b63;color:#fff;padding:18px 22px}main{max-width:1100px;margin:auto;padding:18px}
@@ -51,9 +51,19 @@ table{width:100%;border-collapse:collapse}th,td{padding:9px;border-bottom:1px so
 <button onclick="createEmployeeAccount()">Create Account</button>
 <p id="accountMsg" aria-live="polite"></p>
 </div>
+
+<div class="card no-print">
+<h3>Weekly Daily QR Codes</h3>
+<p>Each office day has its own unique QR code. Generate the week's QR codes here, then download/print the weekly sheet and display the correct day's QR at the office entrance.</p>
+<label>Week Starting (Monday) <input id="qrWeekStart" type="date"></label>
+<button onclick="generateWeeklyQR()">Generate / Download Weekly QR</button>
+<button onclick="printWeeklyQR()">Print Weekly QR / Save as PDF</button>
+<p id="qrMsg" aria-live="polite"></p>
+<div id="weeklyQrPreview" class="grid"></div>
+</div>
+
 <div class="card no-print">
 <h3>Monthly DTR</h3>
-
 <div class="no-print">
 <label>Month <input id="month" type="month"></label>
 <label>Employee <select id="emp"></select></label>
@@ -68,7 +78,7 @@ table{width:100%;border-collapse:collapse}th,td{padding:9px;border-bottom:1px so
 <script>
 const sb=supabase.createClient(window.SUPABASE_URL,window.SUPABASE_ANON_KEY);
 let session=null, profile=null, scanner=null;
-const OFFICE_TOKEN="CSWDO-OFFICE-ATTENDANCE-2026";
+
 const EMPLOYEES=[{"code": "CSWDO-01", "name": "IRENE BARBERO-RACHO", "position": "CITY SOCIAL WELFARE AND DEVELOPMENT OFFICER", "office": "CSWDO"}, {"code": "CSWDO-02", "name": "JESELA TOMINIO", "position": "SOCIAL WELFARE OFFICER III", "office": "CSWDO"}, {"code": "CSWDO-03", "name": "JUDITHA WANASEN", "position": "SOCIAL WELFARE OFFICER II", "office": "CSWDO"}, {"code": "CSWDO-04", "name": "CECILIA PRIANES", "position": "SOCIAL WELFARE OFFICER II", "office": "CSWDO"}, {"code": "CSWDO-05", "name": "ERNESTINA CALACDAY", "position": "SOCIAL WELFARE OFFICER II", "office": "CSWDO"}, {"code": "CSWDO-06", "name": "KAYE ANNE G. ABINO", "position": "SOCIAL WELFARE OFFICER II", "office": "CSWDO"}, {"code": "CSWDO-07", "name": "MARIA LUISA C. TIO", "position": "SOCIAL WELFARE OFFICER II", "office": "CSWDO"}, {"code": "CSWDO-08", "name": "CHRISHA M. TOMAGAN", "position": "SOCIAL WELFARE OFFICER I", "office": "CSWDO"}, {"code": "CSWDO-09", "name": "CLYDE VERGEL TIO", "position": "SOCIAL WELFARE OFFICER I", "office": "CSWDO"}, {"code": "CSWDO-10", "name": "HANNA MICAH MELGAR", "position": "SOCIAL WELFARE OFFICER I", "office": "CSWDO"}, {"code": "CSWDO-11", "name": "CARLO BERNARDO", "position": "YOUTH DEVELOPMENT OFFICER II", "office": "CSWDO-LYDO"}, {"code": "CSWDO-12", "name": "EMELITA BROQUEZA", "position": "ADMIN ASSISTANT II", "office": "CSWDO"}, {"code": "CSWDO-13", "name": "MINDA CAMBUSA", "position": "ADMIN ASSISTANT II", "office": "CSWDO"}, {"code": "CSWDO-14", "name": "CELITO JOE PERILLO", "position": "ADMIN AIDE IV", "office": "CSWDO"}, {"code": "CSWDO-15", "name": "AILEEN JANE QUIOBE", "position": "SOCIAL WELFARE AIDE", "office": "CSWDO"}, {"code": "CSWDO-16", "name": "MA. PILAR REGILME", "position": "ADMIN AIDE III", "office": "CSWDO"}, {"code": "CSWDO-17", "name": "JENNIFER T. MANLANGIT", "position": "ADMIN AIDE III", "office": "CSWDO"}, {"code": "CSWDO-18", "name": "BERNADETH ORIBIANA", "position": "ADMIN AIDE I", "office": "CSWDO"}, {"code": "CSWDO-19", "name": "CHARLIE P. QUIPED", "position": "ADMIN AIDE I", "office": "CSWDO"}, {"code": "CSWDO-20", "name": "VIOLETA BLAZO", "position": "ADMIN AIDE I", "office": "CSWDO"}, {"code": "CSWDO-21", "name": "MARITES PATINGO", "position": "ADMIN AIDE I", "office": "CSWDO"}, {"code": "CSWDO-22", "name": "SHENA MAE BANGATE", "position": "ADMIN ASSISTANT V", "office": "CSWDO"}, {"code": "CSWDO-23", "name": "ALADIN PACLIBAR", "position": "ADMIN AIDE I", "office": "CSWDO"}, {"code": "CSWDO-24", "name": "KEN JAY D. ROMAN", "position": "ADMIN AIDE", "office": "CSWDO"}, {"code": "CSWDO-25", "name": "SUZETTE KAYE C. MONTERO", "position": "ADMIN AIDE", "office": "CSWDO"}, {"code": "CSWDO-26", "name": "ALEN VILLANUEVA", "position": "ADMIN AIDE", "office": "CSWDO"}, {"code": "CSWDO-27", "name": "BERNARD ROBLES", "position": "DATA ENCODER", "office": "CSWDO"}, {"code": "CSWDO-28", "name": "LESTER CORDIAL", "position": "ADMIN AIDE", "office": "CSWDO"}, {"code": "CSWDO-29", "name": "MARY GRACE POMUCENO", "position": "ADMIN AIDE", "office": "CSWDO"}, {"code": "CSWDO-30", "name": "MARIA THERESA ORIBIANA", "position": "TEACHER AIDE", "office": "CSWDO-NCDC"}, {"code": "CSWDO-31", "name": "LOVELY M. LLARENA", "position": "ADMIN AIDE", "office": "CSWDO"}, {"code": "CSWDO-32", "name": "BERNADETH TOLARBA", "position": "ADMIN AIDE", "office": "CSWDO"}, {"code": "CSWDO-33", "name": "MARK ALINDAY", "position": "ADMIN AIDE", "office": "CSWDO"}, {"code": "CSWDO-34", "name": "JINKY COPLA", "position": "ADMIN AIDE", "office": "CSWDO"}, {"code": "CSWDO-35", "name": "ADELINA CASADA", "position": "ADMIN AIDE", "office": "CSWDO"}];
 
 function show(id){['home','scan','admin'].forEach(x=>document.getElementById(x).classList.toggle('hide',x!==id));}
@@ -161,9 +171,116 @@ async function startScanner(){
 }
 async function stopScanner(){if(scanner){await scanner.stop();scanner.clear();scanner=null}}
 async function submitScan(code){
- if(code!==OFFICE_TOKEN){scanmsg.textContent='Invalid office QR.';return}
  const {data,error}=await sb.rpc('record_qr_attendance',{p_office_token:code});
- if(error)scanmsg.textContent=error.message;else scanmsg.textContent='Recorded: '+data.field+' — '+data.time;
+ if(error){
+   scanmsg.textContent=error.message;
+ }else{
+   scanmsg.textContent='Recorded: '+data.field+' — '+formatDTRTime(data.time);
+ }
+}
+
+function getMonday(dateValue){
+ const d = dateValue ? new Date(dateValue+'T00:00:00') : new Date();
+ const day=d.getDay();
+ const diff=(day===0?-6:1-day);
+ d.setDate(d.getDate()+diff);
+ return d;
+}
+function isoDate(d){
+ return d.toISOString().slice(0,10);
+}
+function prettyDate(iso){
+ return new Date(iso+'T00:00:00').toLocaleDateString('en-PH',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+}
+function escapeHtml(s){
+ return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
+}
+async function getWeeklyQRRecords(weekStart){
+ const dates=[];
+ const start=new Date(weekStart+'T00:00:00');
+ for(let i=0;i<5;i++){
+   const d=new Date(start);
+   d.setDate(start.getDate()+i);
+   dates.push(isoDate(d));
+ }
+ const {data:existing,error}=await sb.from('office_qr')
+   .select('id,token,label,qr_date,is_active')
+   .in('qr_date',dates)
+   .order('qr_date');
+ if(error) throw error;
+
+ const byDate=Object.fromEntries((existing||[]).map(x=>[x.qr_date,x]));
+ const rows=[];
+ for(const date of dates){
+   if(byDate[date]){
+     rows.push(byDate[date]);
+     continue;
+   }
+   const token='CSWDO-DAY-'+date+'-'+crypto.randomUUID();
+   const {data:created,error:createError}=await sb.from('office_qr').insert({
+     token,
+     label:'CSWDO Office Attendance — '+date,
+     qr_date:date,
+     is_active:true
+   }).select('id,token,label,qr_date,is_active').single();
+   if(createError) throw createError;
+   rows.push(created);
+ }
+ return rows;
+}
+function weeklyQRHtml(records){
+ const cards=records.map(r=>`
+ <div class="qrpage">
+   <h1>CSWDO EMPLOYEE ATTENDANCE</h1>
+   <h2>${escapeHtml(prettyDate(r.qr_date))}</h2>
+   <p class="instruction">SCAN THIS QR USING YOUR EMPLOYEE ACCOUNT</p>
+   <div class="qr" id="qr-${r.qr_date}"></div>
+   <h3>OFFICIAL DAILY OFFICE QR</h3>
+   <p>Valid only on <b>${escapeHtml(prettyDate(r.qr_date))}</b></p>
+   <p class="small">5:00 AM start • 12:00 NN transition • 5:00 PM departure</p>
+ </div>`).join('');
+ return `<!doctype html><html><head><meta charset="utf-8"><title>CSWDO Weekly Daily QR Codes</title>
+ <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>
+ <style>
+ body{font-family:Arial,sans-serif;margin:0;background:#eee}.qrpage{box-sizing:border-box;background:#fff;width:210mm;min-height:297mm;margin:0 auto 12px;padding:20mm;text-align:center;page-break-after:always}.qr{width:360px;height:360px;margin:28px auto;display:flex;justify-content:center;align-items:center}.instruction{font-size:18px;font-weight:700}.small{color:#555}@media print{@page{size:A4 portrait;margin:0}body{background:#fff}.qrpage{margin:0}}
+ </style></head><body>${cards}<script>
+ const records=${JSON.stringify(records)};
+ records.forEach(r=>new QRCode(document.getElementById('qr-'+r.qr_date),{text:r.token,width:360,height:360}));
+ <\/script></body></html>`;
+}
+async function generateWeeklyQR(){
+ if(profile?.role!=='admin') return;
+ const msg=document.getElementById('qrMsg');
+ const preview=document.getElementById('weeklyQrPreview');
+ const start=document.getElementById('qrWeekStart').value;
+ if(!start){msg.textContent='Please select the Monday for the week.';return;}
+ msg.textContent='Generating weekly QR codes...';
+ preview.innerHTML='';
+ try{
+   const records=await getWeeklyQRRecords(start);
+   preview.innerHTML=records.map(r=>`<div class="card" style="text-align:center"><h4>${escapeHtml(prettyDate(r.qr_date))}</h4><div id="preview-${r.qr_date}" style="display:flex;justify-content:center"></div><p>Unique daily QR</p></div>`).join('');
+   records.forEach(r=>new QRCode(document.getElementById('preview-'+r.qr_date),{text:r.token,width:180,height:180}));
+   window.weeklyQRRecords=records;
+   window.weeklyQRHtml=weeklyQRHtml(records);
+   const blob=new Blob([window.weeklyQRHtml],{type:'text/html;charset=utf-8'});
+   const url=URL.createObjectURL(blob);
+   const a=document.createElement('a');
+   a.href=url;
+   a.download='CSWDO_Weekly_Daily_QR_'+start+'.html';
+   a.click();
+   URL.revokeObjectURL(url);
+   msg.textContent='✓ Weekly QR created. The downloaded HTML contains 5 daily QR codes (Monday–Friday).';
+ }catch(e){
+   msg.textContent='Unable to generate weekly QR: '+(e?.message||String(e));
+ }
+}
+function printWeeklyQR(){
+ if(!window.weeklyQRHtml){document.getElementById('qrMsg').textContent='Generate the weekly QR codes first.';return;}
+ const w=window.open('','_blank');
+ w.document.write(window.weeklyQRHtml);
+ w.document.close();
+ w.focus();
+ setTimeout(()=>w.print(),700);
 }
 async function fillEmployees(){
  const {data}=await sb.from('employees').select('*').eq('is_active',true).order('full_name');
@@ -281,4 +398,14 @@ async function printAll(){
  const w=window.open('','_blank');w.document.write('<html><head><title>DTR All Employees</title><style>body{font-family:Arial}table{width:100%;border-collapse:collapse}th,td{border:1px solid #777;padding:4px;text-align:center;font-size:11px}@media print{@page{size:legal landscape;margin:10mm}}</style></head><body>'+out+'</body></html>');w.document.close();w.focus();setTimeout(()=>w.print(),500);
 }
 setInterval(()=>clock.textContent=new Date().toLocaleString('en-PH',{dateStyle:'full',timeStyle:'medium'}),1000);
+(function initDefaults(){
+ const mon=getMonday();
+ const qrWeekStart=document.getElementById('qrWeekStart');
+ if(qrWeekStart) qrWeekStart.value=isoDate(mon);
+ const monthInput=document.getElementById('month');
+ if(monthInput){
+   const now=new Date();
+   monthInput.value=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+ }
+})();
 </script></body></html>
