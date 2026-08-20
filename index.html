@@ -19,7 +19,7 @@ table{width:100%;border-collapse:collapse}th,td{padding:9px;border-bottom:1px so
 .tardy-time{color:#b00020 !important;font-weight:700}
 
 .status-chip{font-weight:700}
-</style>
+label{display:inline-block;margin:6px 8px 6px 0;font-size:14px}label input,label select{display:block;margin-top:4px;min-width:220px}.small{font-size:13px;color:#475569}.muted{margin-top:10px;color:#334155}.row{display:flex;gap:8px;flex-wrap:wrap}</style>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#0b5ed7">
 <meta name="mobile-web-app-capable" content="yes">
@@ -34,11 +34,45 @@ table{width:100%;border-collapse:collapse}th,td{padding:9px;border-bottom:1px so
 <main>
 <div id="login" class="card">
 <h2>Employee / Admin Login</h2>
-<p>Use the account created for you by the administrator.</p>
+<p>Use your employee account. New employees can create an account below.</p>
 <input id="email" type="email" placeholder="Email">
 <input id="password" type="password" placeholder="Password">
 <button onclick="login()">Login</button><p id="msg"></p>
+</div><section id="publicAccountTools" class="card">
+<h3>Employee Account Access</h3>
+<p class="small">New employee? Create your own account using your official CSWDO Employee Code. Already registered? Use Forgot Password to recover access.</p>
+<div class="row">
+<button type="button" onclick="showRegisterForm()">Create Employee Account</button>
+<button type="button" onclick="showForgotPassword()">Forgot Password?</button>
 </div>
+<div id="registerForm" class="hide">
+<h4>Create Employee Account</h4>
+<label>Employee Code<input id="regEmployeeCode" placeholder="e.g. CSWDO-02" autocomplete="off"></label>
+<label>Email Address<input id="regEmail" type="email" placeholder="employee@example.com" autocomplete="email"></label>
+<label>Password<input id="regPassword" type="password" minlength="8" autocomplete="new-password"></label>
+<label>Confirm Password<input id="regPassword2" type="password" minlength="8" autocomplete="new-password"></label>
+<button type="button" onclick="registerEmployee()">Create Account</button>
+<button type="button" onclick="hideAccountForms()">Cancel</button>
+<div id="registerMsg" class="muted" aria-live="polite"></div>
+</div>
+<div id="forgotForm" class="hide">
+<h4>Reset Password</h4>
+<p class="small">Enter the email address registered to your employee account. A reset link will be sent to your email.</p>
+<label>Registered Email<input id="forgotEmail" type="email" placeholder="employee@example.com" autocomplete="email"></label>
+<button type="button" onclick="sendPasswordReset()">Send Reset Link</button>
+<button type="button" onclick="hideAccountForms()">Cancel</button>
+<div id="forgotMsg" class="muted" aria-live="polite"></div>
+</div>
+</section>
+<section id="resetPasswordForm" class="card hide">
+<h3>Set New Password</h3>
+<p class="small">Enter your new password below.</p>
+<label>New Password<input id="newPassword" type="password" minlength="8" autocomplete="new-password"></label>
+<label>Confirm New Password<input id="newPassword2" type="password" minlength="8" autocomplete="new-password"></label>
+<button type="button" onclick="updateMyPassword()">Update Password</button>
+<div id="resetMsg" class="muted" aria-live="polite"></div>
+</section>
+
 <div id="app" class="hide">
 <nav class="no-print"><button onclick="show('home')">Home</button><button onclick="show('scan')">Scan Attendance</button><button id="adminBtn" class="hide" onclick="show('admin')">Admin / DTR</button><button onclick="logout()">Logout</button></nav>
 
@@ -48,44 +82,7 @@ table{width:100%;border-collapse:collapse}th,td{padding:9px;border-bottom:1px so
 </section>
 
 
-<section id="accountTools" class="card">
-  <h3>Employee Account</h3>
-  <div class="row">
-    <button onclick="showRegisterForm()">Create Employee Account</button>
-    <button onclick="showForgotPassword()">Forgot Password?</button>
-  </div>
 
-  <div id="registerForm" class="hide">
-    <h4>Create Employee Account</h4>
-    <p class="small">Use the employee's official CSWDO employee code. The code must match an active employee record.</p>
-    <label>Employee Code
-      <input id="regEmployeeCode" placeholder="e.g. CSWDO-02" autocomplete="off">
-    </label>
-    <label>Email Address
-      <input id="regEmail" type="email" placeholder="employee@example.com" autocomplete="email">
-    </label>
-    <label>Password
-      <input id="regPassword" type="password" minlength="8" autocomplete="new-password">
-    </label>
-    <label>Confirm Password
-      <input id="regPassword2" type="password" minlength="8" autocomplete="new-password">
-    </label>
-    <button onclick="registerEmployee()">Create Account</button>
-    <button onclick="hideAccountForms()">Cancel</button>
-    <div id="registerMsg" class="muted"></div>
-  </div>
-
-  <div id="forgotForm" class="hide">
-    <h4>Reset Password</h4>
-    <p class="small">Enter the email address registered to your employee account. A password-reset link will be sent by email.</p>
-    <label>Registered Email
-      <input id="forgotEmail" type="email" placeholder="employee@example.com" autocomplete="email">
-    </label>
-    <button onclick="sendPasswordReset()">Send Reset Link</button>
-    <button onclick="hideAccountForms()">Cancel</button>
-    <div id="forgotMsg" class="muted"></div>
-  </div>
-</section>
 
 <section id="scan" class="card hide">
 <p class="small"><b>Attendance rules:</b> A.M. Arrival = 5:00 AM–11:59 AM; A.M. Departure = 5:00 AM–11:59 AM; P.M. Arrival = 12:00 PM–4:59 PM; P.M. Departure = 5:00 PM onward. A P.M. scan does not fill A.M. Departure. A.M. Arrival after 8:00 AM is marked <span class="tardy-time">TARDY</span>.</p>
@@ -97,18 +94,7 @@ table{width:100%;border-collapse:collapse}th,td{padding:9px;border-bottom:1px so
 </section>
 
 
-<section id="resetPasswordForm" class="card hide">
-  <h3>Set New Password</h3>
-  <p class="small">Enter your new password below.</p>
-  <label>New Password
-    <input id="newPassword" type="password" minlength="8" autocomplete="new-password">
-  </label>
-  <label>Confirm New Password
-    <input id="newPassword2" type="password" minlength="8" autocomplete="new-password">
-  </label>
-  <button onclick="updateMyPassword()">Update Password</button>
-  <div id="resetMsg" class="muted"></div>
-</section>
+
 
 <section id="admin" class="card hide">
 <h2>Admin Dashboard</h2>
@@ -272,6 +258,8 @@ async function boot(){
 
  profile=data;
  loginBox.classList.add('hide');
+ document.getElementById('publicAccountTools')?.classList.add('hide');
+ document.getElementById('resetPasswordForm')?.classList.add('hide');
  appBox.classList.remove('hide');
 
  welcomeBox.textContent='Welcome, '+(data.employees?.full_name||session.user.email);
@@ -372,6 +360,7 @@ function weeklyQRHtml(records){
  const records=${JSON.stringify(records)};
  records.forEach(r=>new QRCode(document.getElementById('qr-'+r.qr_date),{text:r.token,width:360,height:360}));
  <\/script>
+
 </body></html>`;
 }
 async function generateWeeklyQR(){
@@ -770,56 +759,18 @@ async function registerEmployee(){
   const password2=document.getElementById('regPassword2').value;
   const msg=document.getElementById('registerMsg');
 
-  if(!code || !email || !password || !password2){
-    msg.textContent='Please complete all fields.';
-    return;
-  }
-  if(password.length<8){
-    msg.textContent='Password must be at least 8 characters.';
-    return;
-  }
-  if(password!==password2){
-    msg.textContent='Passwords do not match.';
-    return;
-  }
+  if(!code || !email || !password || !password2){ msg.textContent='Please complete all fields.'; return; }
+  if(password.length<8){ msg.textContent='Password must be at least 8 characters.'; return; }
+  if(password!==password2){ msg.textContent='Passwords do not match.'; return; }
 
-  msg.textContent='Checking employee code...';
-
+  msg.textContent='Creating your employee account...';
   try{
-    const {data:employee,error:employeeError}=await sb
-      .from('employees')
-      .select('id,employee_code,full_name,is_active')
-      .eq('employee_code',code)
-      .single();
-
-    if(employeeError || !employee){
-      throw new Error('Employee code not found.');
-    }
-    if(!employee.is_active){
-      throw new Error('This employee is inactive. Please contact the Admin.');
-    }
-
-    // Existing profile check. The profile ID is an auth user ID.
-    const {data:existingProfile,error:profileError}=await sb
-      .from('profiles')
-      .select('id,employee_id')
-      .eq('employee_id',employee.id)
-      .maybeSingle();
-
-    if(profileError) throw profileError;
-    if(existingProfile){
-      throw new Error('This employee already has an account. Use Forgot Password if access is needed.');
-    }
-
-    // Call the public self-registration Edge Function.
-    const {data:fnData,error:fnError}=await sb.functions.invoke('register-employee', {
-      body:{employee_id:employee.id,email,password}
+    const {data:fnData,error:fnError}=await sb.functions.invoke('register-employee',{
+      body:{employee_code:code,email,password}
     });
-
     if(fnError) throw fnError;
     if(!fnData?.success) throw new Error(fnData?.error || 'Account registration failed.');
-
-    msg.textContent=`Account created for ${employee.full_name}. You may now log in.`;
+    msg.textContent=`Account created for ${fnData.full_name || code}. You may now log in.`;
     document.getElementById('regPassword').value='';
     document.getElementById('regPassword2').value='';
   }catch(err){
@@ -882,4 +833,14 @@ if(typeof sb!=='undefined' && sb.auth){
   });
 }
 
-</script></body></html>
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(err => {
+      console.warn('Service worker registration failed:', err);
+    });
+  });
+}
+</script>
+</body></html>
