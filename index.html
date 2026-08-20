@@ -14,6 +14,9 @@ nav button{margin:4px}.grid{display:grid;grid-template-columns:repeat(auto-fit,m
 table{width:100%;border-collapse:collapse}th,td{padding:9px;border-bottom:1px solid #e5e7eb;text-align:left;font-size:13px}
 .badge{padding:4px 7px;border-radius:20px;background:#e8f4ff}.hide{display:none}.danger{background:#a21caf}
 @media print{nav,#login,.no-print{display:none!important}body{background:#fff}.card{box-shadow:none}}
+
+.tardy-message{color:#b00020 !important;font-weight:700}
+.tardy-time{color:#b00020 !important;font-weight:700}
 </style></head>
 <body>
 <header><b>CSWDO Employee QR Logbook</b><div>Online Attendance & DTR System</div></header>
@@ -34,6 +37,8 @@ table{width:100%;border-collapse:collapse}th,td{padding:9px;border-bottom:1px so
 </section>
 
 <section id="scan" class="card hide">
+<p class="small"><b>Attendance rules:</b> A.M. Arrival = 5:00 AM–11:59 AM; A.M. Departure = 5:00 AM–11:59 AM; P.M. Arrival = 12:00 PM–4:59 PM; P.M. Departure = 5:00 PM onward. A P.M. scan does not fill A.M. Departure. A.M. Arrival after 8:00 AM is marked <span class="tardy-time">TARDY</span>.</p>
+
 <h2>Scan Office Attendance QR</h2>
 <p>Scan the official printed CSWDO office QR. The system automatically chooses the correct DTR field.</p>
 <div id="reader" style="max-width:500px"></div><button onclick="startScanner()">Start Camera</button><button onclick="stopScanner()">Stop Camera</button>
@@ -189,9 +194,14 @@ async function stopScanner(){if(scanner){await scanner.stop();scanner.clear();sc
 async function submitScan(code){
  const {data,error}=await sb.rpc('record_qr_attendance',{p_office_token:code});
  if(error){
+   scanmsg.classList.remove('tardy-message');
    scanmsg.textContent=error.message;
  }else{
-   scanmsg.textContent='Recorded: '+data.field+' — '+formatDTRTime(data.time);
+   const isTardy = data.field === 'A.M. Arrival' && String(data.time).slice(0,8) > '08:00:00';
+   scanmsg.classList.toggle('tardy-message', isTardy);
+   scanmsg.textContent = isTardy
+     ? 'Recorded: A.M. Arrival — '+formatDTRTime(data.time)+' — TARDY'
+     : 'Recorded: '+data.field+' — '+formatDTRTime(data.time);
  }
 }
 
@@ -475,14 +485,15 @@ async function loadDailyAttendance(){
 
       // "Time In" is the first arrival recorded for the day.
       const timeIn = am || pm || '';
+      const amTardy = a.am_arrival && String(a.am_arrival).slice(0,8) > '08:00:00';
       let status = 'Not Timed In';
 
       if(pmd){
-        status = 'Timed Out';
+        status = amTardy ? 'Timed Out — Tardy' : 'Timed Out';
         timedOut++;
         timedIn++;
       }else if(timeIn){
-        status = 'Timed In';
+        status = amTardy ? 'Timed In — Tardy' : 'Timed In';
         timedIn++;
       }else{
         notTimedIn++;
