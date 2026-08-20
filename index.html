@@ -243,6 +243,16 @@ async function createEmployeeAccount(){
    }
  }
 }
+function formatDTRTime(value){
+ if(!value)return '';
+ const m=String(value).match(/^(\d{1,2}):(\d{2})/);
+ if(!m)return value;
+ let h=Number(m[1]);
+ const minutes=m[2];
+ const suffix=h>=12?'PM':'AM';
+ h=h%12||12;
+ return `${h}:${minutes} ${suffix}`;
+}
 function monthDays(m){let [y,mo]=m.split('-').map(Number),last=new Date(y,mo,0).getDate();return Array.from({length:last},(_,i)=>String(i+1).padStart(2,'0'))}
 async function loadDTR(){
  if(profile.role!=='admin')return;
@@ -254,7 +264,7 @@ async function loadDTR(){
  const map=Object.fromEntries((a||[]).map(x=>[x.attendance_date,x]));
  let rows=monthDays(m).map(day=>{
    const x=map[m+'-'+day]||{};
-   return `<tr><td>${day}</td><td>${x.am_arrival||''}</td><td>${x.am_departure||''}</td><td>${x.pm_arrival||''}</td><td>${x.pm_departure||''}</td><td></td><td></td></tr>`;
+   return `<tr><td>${day}</td><td>${formatDTRTime(x.am_arrival)}</td><td>${formatDTRTime(x.am_departure)}</td><td>${formatDTRTime(x.pm_arrival)}</td><td>${formatDTRTime(x.pm_departure)}</td><td></td><td></td></tr>`;
  }).join('');
  dtr.innerHTML=`<div class="dtrprint"><h2 style="text-align:center">CIVIL SERVICE FORM No. 48</h2><h2 style="text-align:center">DAILY TIME RECORD</h2><h3 style="text-align:center">${e.full_name}</h3><p style="text-align:center">For the month of ${m}</p>
  <table><tr><th rowspan=2>Day</th><th colspan=2>A.M.</th><th colspan=2>P.M.</th><th colspan=2>Undertime</th></tr><tr><th>Arrival</th><th>Departure</th><th>Arrival</th><th>Departure</th><th>Hours</th><th>Minutes</th></tr>${rows}</table>
@@ -265,7 +275,7 @@ async function printAll(){
  const {data:es}=await sb.from('employees').select('*').eq('is_active',true).order('full_name');
  let out=''; for(const e of es){
   const {data:a}=await sb.from('attendance').select('*').eq('employee_id',e.id).gte('attendance_date',month.value+'-01').lte('attendance_date',month.value+'-31').order('attendance_date');
-  const map=Object.fromEntries((a||[]).map(x=>[x.attendance_date,x])); let rows=monthDays(month.value).map(day=>{const x=map[month.value+'-'+day]||{};return `<tr><td>${day}</td><td>${x.am_arrival||''}</td><td>${x.am_departure||''}</td><td>${x.pm_arrival||''}</td><td>${x.pm_departure||''}</td><td></td><td></td></tr>`}).join('');
+  const map=Object.fromEntries((a||[]).map(x=>[x.attendance_date,x])); let rows=monthDays(month.value).map(day=>{const x=map[month.value+'-'+day]||{};return `<tr><td>${day}</td><td>${formatDTRTime(x.am_arrival)}</td><td>${formatDTRTime(x.am_departure)}</td><td>${formatDTRTime(x.pm_arrival)}</td><td>${formatDTRTime(x.pm_departure)}</td><td></td><td></td></tr>`}).join('');
   out+=`<div class="dtrprint" style="page-break-after:always"><h2 style="text-align:center">CIVIL SERVICE FORM No. 48</h2><h2 style="text-align:center">DAILY TIME RECORD</h2><h3 style="text-align:center">${e.full_name}</h3><p style="text-align:center">For the month of ${month.value}</p><table><tr><th>Day</th><th>A.M. Arrival</th><th>A.M. Departure</th><th>P.M. Arrival</th><th>P.M. Departure</th><th>Undertime Hours</th><th>Undertime Minutes</th></tr>${rows}</table></div>`;
  }
  const w=window.open('','_blank');w.document.write('<html><head><title>DTR All Employees</title><style>body{font-family:Arial}table{width:100%;border-collapse:collapse}th,td{border:1px solid #777;padding:4px;text-align:center;font-size:11px}@media print{@page{size:legal landscape;margin:10mm}}</style></head><body>'+out+'</body></html>');w.document.close();w.focus();setTimeout(()=>w.print(),500);
