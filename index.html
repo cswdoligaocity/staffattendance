@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CSWDO Employee QR Logbook</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="https://unpkg.com/html5-qrcode"></script>
+<style>
+*{box-sizing:border-box}body{font-family:Inter,Arial,sans-serif;margin:0;background:#f4f7fb;color:#183047}
+header{background:#123b63;color:#fff;padding:18px 22px}main{max-width:1100px;margin:auto;padding:18px}
+.card{background:#fff;border-radius:14px;padding:18px;margin:14px 0;box-shadow:0 2px 12px #0001}
+input,select,button{padding:11px;border-radius:8px;border:1px solid #cbd5e1}button{background:#123b63;color:white;font-weight:700;cursor:pointer}
+nav button{margin:4px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:15px}
+table{width:100%;border-collapse:collapse}th,td{padding:9px;border-bottom:1px solid #e5e7eb;text-align:left;font-size:13px}
+.badge{padding:4px 7px;border-radius:20px;background:#e8f4ff}.hide{display:none}.danger{background:#a21caf}
+@media print{nav,#login,.no-print{display:none!important}body{background:#fff}.card{box-shadow:none}}
+</style></head>
+<body>
+<header><b>CSWDO Employee QR Logbook</b><div>Online Attendance & DTR System</div></header>
+<main>
+<div id="login" class="card">
+<h2>Employee / Admin Login</h2>
+<p>Use the account created for you by the administrator.</p>
+<input id="email" type="email" placeholder="Email">
+<input id="password" type="password" placeholder="Password">
+<button onclick="login()">Login</button><p id="msg"></p>
+</div>
+<div id="app" class="hide">
+<nav class="no-print"><button onclick="show('home')">Home</button><button onclick="show('scan')">Scan Attendance</button><button id="adminBtn" class="hide" onclick="show('admin')">Admin / DTR</button><button onclick="logout()">Logout</button></nav>
+
+<section id="home" class="card">
+<h2 id="welcome"></h2><p id="role"></p><div id="clock"></div>
+<div class="grid"><div class="card"><b>5:00 AM</b><br>A.M. Arrival starts</div><div class="card"><b>12:00 NN</b><br>A.M. Departure + P.M. Arrival</div><div class="card"><b>5:00 PM</b><br>P.M. Departure starts</div></div>
+</section>
+
+<section id="scan" class="card hide">
+<h2>Scan Office Attendance QR</h2>
+<p>Scan the official printed CSWDO office QR. The system automatically chooses the correct DTR field.</p>
+<div id="reader" style="max-width:500px"></div><button onclick="startScanner()">Start Camera</button><button onclick="stopScanner()">Stop Camera</button>
+<p id="scanmsg"></p>
+</section>
+
+<section id="admin" class="card hide">
+<h2>Admin Dashboard</h2>
+<div class="card no-print">
+<h3>Create Employee Account</h3>
+<p>Select a preloaded employee, enter their email and a temporary password. The system will create the Supabase login and automatically link it to that employee.</p>
+<label>Employee <select id="accountEmployee"></select></label>
+<label>Email <input id="accountEmail" type="email" placeholder="employee@email.com"></label>
+<label>Temporary Password <input id="accountPassword" type="password" placeholder="At least 8 characters"></label>
+<button onclick="createEmployeeAccount()">Create Account</button>
+<p id="accountMsg"></p>
+</div>
+<div class="card no-print">
+<h3>Monthly DTR</h3>
+
+<div class="no-print">
+<label>Month <input id="month" type="month"></label>
+<label>Employee <select id="emp"></select></label>
+<button onclick="loadDTR()">Load DTR</button>
+<button onclick="printDTR()">Print DTR</button>
+<button onclick="printAll()">Print All Employees</button>
+</div>
+<div id="dtr"></div>
+</section>
+</div></main>
+
+<script>
+const sb=supabase.createClient(window.SUPABASE_URL,window.SUPABASE_ANON_KEY);
+let session=null, profile=null, scanner=null;
+const OFFICE_TOKEN="CSWDO-OFFICE-ATTENDANCE-2026";
+const EMPLOYEES=[{"code": "CSWDO-01", "name": "IRENE BARBERO-RACHO", "position": "CITY SOCIAL WELFARE AND DEVELOPMENT OFFICER", "office": "CSWDO"}, {"code": "CSWDO-02", "name": "JESELA TOMINIO", "position": "SOCIAL WELFARE OFFICER III", "office": "CSWDO"}, {"code": "CSWDO-03", "name": "JUDITHA WANASEN", "position": "SOCIAL WELFARE OFFICER II", "office": "CSWDO"}, {"code": "CSWDO-04", "name": "CECILIA PRIANES", "position": "SOCIAL WELFARE OFFICER II", "office": "CSWDO"}, {"code": "CSWDO-05", "name": "ERNESTINA CALACDAY", "position": "SOCIAL WELFARE OFFICER II", "office": "CSWDO"}, {"code": "CSWDO-06", "name": "KAYE ANNE G. ABINO", "position": "SOCIAL WELFARE OFFICER II", "office": "CSWDO"}, {"code": "CSWDO-07", "name": "MARIA LUISA C. TIO", "position": "SOCIAL WELFARE OFFICER II", "office": "CSWDO"}, {"code": "CSWDO-08", "name": "CHRISHA M. TOMAGAN", "position": "SOCIAL WELFARE OFFICER I", "office": "CSWDO"}, {"code": "CSWDO-09", "name": "CLYDE VERGEL TIO", "position": "SOCIAL WELFARE OFFICER I", "office": "CSWDO"}, {"code": "CSWDO-10", "name": "HANNA MICAH MELGAR", "position": "SOCIAL WELFARE OFFICER I", "office": "CSWDO"}, {"code": "CSWDO-11", "name": "CARLO BERNARDO", "position": "YOUTH DEVELOPMENT OFFICER II", "office": "CSWDO-LYDO"}, {"code": "CSWDO-12", "name": "EMELITA BROQUEZA", "position": "ADMIN ASSISTANT II", "office": "CSWDO"}, {"code": "CSWDO-13", "name": "MINDA CAMBUSA", "position": "ADMIN ASSISTANT II", "office": "CSWDO"}, {"code": "CSWDO-14", "name": "CELITO JOE PERILLO", "position": "ADMIN AIDE IV", "office": "CSWDO"}, {"code": "CSWDO-15", "name": "AILEEN JANE QUIOBE", "position": "SOCIAL WELFARE AIDE", "office": "CSWDO"}, {"code": "CSWDO-16", "name": "MA. PILAR REGILME", "position": "ADMIN AIDE III", "office": "CSWDO"}, {"code": "CSWDO-17", "name": "JENNIFER T. MANLANGIT", "position": "ADMIN AIDE III", "office": "CSWDO"}, {"code": "CSWDO-18", "name": "BERNADETH ORIBIANA", "position": "ADMIN AIDE I", "office": "CSWDO"}, {"code": "CSWDO-19", "name": "CHARLIE P. QUIPED", "position": "ADMIN AIDE I", "office": "CSWDO"}, {"code": "CSWDO-20", "name": "VIOLETA BLAZO", "position": "ADMIN AIDE I", "office": "CSWDO"}, {"code": "CSWDO-21", "name": "MARITES PATINGO", "position": "ADMIN AIDE I", "office": "CSWDO"}, {"code": "CSWDO-22", "name": "SHENA MAE BANGATE", "position": "ADMIN ASSISTANT V", "office": "CSWDO"}, {"code": "CSWDO-23", "name": "ALADIN PACLIBAR", "position": "ADMIN AIDE I", "office": "CSWDO"}, {"code": "CSWDO-24", "name": "KEN JAY D. ROMAN", "position": "ADMIN AIDE", "office": "CSWDO"}, {"code": "CSWDO-25", "name": "SUZETTE KAYE C. MONTERO", "position": "ADMIN AIDE", "office": "CSWDO"}, {"code": "CSWDO-26", "name": "ALEN VILLANUEVA", "position": "ADMIN AIDE", "office": "CSWDO"}, {"code": "CSWDO-27", "name": "BERNARD ROBLES", "position": "DATA ENCODER", "office": "CSWDO"}, {"code": "CSWDO-28", "name": "LESTER CORDIAL", "position": "ADMIN AIDE", "office": "CSWDO"}, {"code": "CSWDO-29", "name": "MARY GRACE POMUCENO", "position": "ADMIN AIDE", "office": "CSWDO"}, {"code": "CSWDO-30", "name": "MARIA THERESA ORIBIANA", "position": "TEACHER AIDE", "office": "CSWDO-NCDC"}, {"code": "CSWDO-31", "name": "LOVELY M. LLARENA", "position": "ADMIN AIDE", "office": "CSWDO"}, {"code": "CSWDO-32", "name": "BERNADETH TOLARBA", "position": "ADMIN AIDE", "office": "CSWDO"}, {"code": "CSWDO-33", "name": "MARK ALINDAY", "position": "ADMIN AIDE", "office": "CSWDO"}, {"code": "CSWDO-34", "name": "JINKY COPLA", "position": "ADMIN AIDE", "office": "CSWDO"}, {"code": "CSWDO-35", "name": "ADELINA CASADA", "position": "ADMIN AIDE", "office": "CSWDO"}];
+
+function show(id){['home','scan','admin'].forEach(x=>document.getElementById(x).classList.toggle('hide',x!==id));}
+async function login(){
+ const {data,error}=await sb.auth.signInWithPassword({email:email.value,password:password.value});
+ if(error){msg.textContent=error.message;return}
+ session=data.session; await boot();
+}
+async function boot(){
+ const {data}=await sb.from('profiles').select('*,employees(*)').eq('id',session.user.id).single();
+ profile=data;
+ login.classList.add('hide');app.classList.remove('hide');
+ welcome.textContent='Welcome, '+(data.employees?.full_name||session.user.email);
+ role.textContent='Account: '+data.role;
+ adminBtn.classList.toggle('hide',data.role!=='admin');
+ if(data.role==='admin'){await fillEmployees();}
+}
+async function logout(){await sb.auth.signOut();location.reload()}
+async function startScanner(){
+ if(scanner)return;
+ scanner=new Html5Qrcode("reader");
+ try{await scanner.start({facingMode:"environment"},{fps:10,qrbox:250},async code=>{await submitScan(code)});}
+ catch(e){scanmsg.textContent='Camera error: '+e.message}
+}
+async function stopScanner(){if(scanner){await scanner.stop();scanner.clear();scanner=null}}
+async function submitScan(code){
+ if(code!==OFFICE_TOKEN){scanmsg.textContent='Invalid office QR.';return}
+ const {data,error}=await sb.rpc('record_qr_attendance',{p_office_token:code});
+ if(error)scanmsg.textContent=error.message;else scanmsg.textContent='Recorded: '+data.field+' — '+data.time;
+}
+async function fillEmployees(){
+ const {data}=await sb.from('employees').select('*').eq('is_active',true).order('full_name');
+ emp.innerHTML=data.map(e=>`<option value="${e.id}">${e.full_name} (${e.employee_code})</option>`).join('');
+ const ae=document.getElementById('accountEmployee');
+ if(ae) ae.innerHTML=data.map(e=>`<option value="${e.id}">${e.full_name} (${e.employee_code})</option>`).join('');
+}
+async function createEmployeeAccount(){
+ if(profile.role!=='admin') return;
+ const employee_id=document.getElementById('accountEmployee').value;
+ const email=document.getElementById('accountEmail').value.trim();
+ const password=document.getElementById('accountPassword').value;
+ const accountMsg=document.getElementById('accountMsg');
+ if(!employee_id||!email||!password){accountMsg.textContent='Employee, email and password are required.';return;}
+ accountMsg.textContent='Creating account...';
+ const {data,error}=await sb.functions.invoke('create-employee-account',{
+   body:{employee_id,email,password}
+ });
+ if(error){accountMsg.textContent=error.message;return;}
+ accountMsg.textContent=data?.message||'Account created.';
+ document.getElementById('accountEmail').value='';
+ document.getElementById('accountPassword').value='';
+ await fillEmployees();
+}
+function monthDays(m){let [y,mo]=m.split('-').map(Number),last=new Date(y,mo,0).getDate();return Array.from({length:last},(_,i)=>String(i+1).padStart(2,'0'))}
+async function loadDTR(){
+ if(profile.role!=='admin')return;
+ const m=month.value;if(!m)return;
+ const eid=emp.value; const {data:e}=await sb.from('employees').select('*').eq('id',eid).single();
+ const start=m+'-01'; const end=m+'-31';
+ const {data:a,error}=await sb.from('attendance').select('*').eq('employee_id',eid).gte('attendance_date',start).lte('attendance_date',end).order('attendance_date');
+ if(error){dtr.innerHTML='<p>'+error.message+'</p>';return}
+ const map=Object.fromEntries((a||[]).map(x=>[x.attendance_date,x]));
+ let rows=monthDays(m).map(day=>{
+   const x=map[m+'-'+day]||{};
+   return `<tr><td>${day}</td><td>${x.am_arrival||''}</td><td>${x.am_departure||''}</td><td>${x.pm_arrival||''}</td><td>${x.pm_departure||''}</td><td></td><td></td></tr>`;
+ }).join('');
+ dtr.innerHTML=`<div class="dtrprint"><h2 style="text-align:center">CIVIL SERVICE FORM No. 48</h2><h2 style="text-align:center">DAILY TIME RECORD</h2><h3 style="text-align:center">${e.full_name}</h3><p style="text-align:center">For the month of ${m}</p>
+ <table><tr><th rowspan=2>Day</th><th colspan=2>A.M.</th><th colspan=2>P.M.</th><th colspan=2>Undertime</th></tr><tr><th>Arrival</th><th>Departure</th><th>Arrival</th><th>Departure</th><th>Hours</th><th>Minutes</th></tr>${rows}</table>
+ <p>Undertime: blank — no calculation provided by QR attendance.</p></div>`;
+}
+function printDTR(){loadDTR().then(()=>setTimeout(()=>window.print(),300))}
+async function printAll(){
+ const {data:es}=await sb.from('employees').select('*').eq('is_active',true).order('full_name');
+ let out=''; for(const e of es){
+  const {data:a}=await sb.from('attendance').select('*').eq('employee_id',e.id).gte('attendance_date',month.value+'-01').lte('attendance_date',month.value+'-31').order('attendance_date');
+  const map=Object.fromEntries((a||[]).map(x=>[x.attendance_date,x])); let rows=monthDays(month.value).map(day=>{const x=map[month.value+'-'+day]||{};return `<tr><td>${day}</td><td>${x.am_arrival||''}</td><td>${x.am_departure||''}</td><td>${x.pm_arrival||''}</td><td>${x.pm_departure||''}</td><td></td><td></td></tr>`}).join('');
+  out+=`<div class="dtrprint" style="page-break-after:always"><h2 style="text-align:center">CIVIL SERVICE FORM No. 48</h2><h2 style="text-align:center">DAILY TIME RECORD</h2><h3 style="text-align:center">${e.full_name}</h3><p style="text-align:center">For the month of ${month.value}</p><table><tr><th>Day</th><th>A.M. Arrival</th><th>A.M. Departure</th><th>P.M. Arrival</th><th>P.M. Departure</th><th>Undertime Hours</th><th>Undertime Minutes</th></tr>${rows}</table></div>`;
+ }
+ const w=window.open('','_blank');w.document.write('<html><head><title>DTR All Employees</title><style>body{font-family:Arial}table{width:100%;border-collapse:collapse}th,td{border:1px solid #777;padding:4px;text-align:center;font-size:11px}@media print{@page{size:legal landscape;margin:10mm}}</style></head><body>'+out+'</body></html>');w.document.close();w.focus();setTimeout(()=>w.print(),500);
+}
+setInterval(()=>clock.textContent=new Date().toLocaleString('en-PH',{dateStyle:'full',timeStyle:'medium'}),1000);
+</script></body></html>
